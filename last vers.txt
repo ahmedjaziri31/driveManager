@@ -1,0 +1,68 @@
+import cv2
+import easyocr
+import numpy as np
+
+def enhance_image(image_path, output_path):
+    img = cv2.imread(image_path)
+    # Cut off the bottom half of the image
+    height, width = img.shape[:2]
+    img = img[:height // 2, :width]
+
+    # Cut off the bottom half of the remaining top half
+    height, width = img.shape[:2]
+    img = img[height // 2:, :width]
+
+    # Resize the image
+    img = cv2.resize(img, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+
+    # Convert to grayscale
+    gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Apply Gaussian blur
+    blurred_img = cv2.GaussianBlur(gray_img, (5, 5), 0)
+
+    # Apply Non-local Means filtering
+    nl_mean_filtered_img = cv2.fastNlMeansDenoising(blurred_img, h=30, templateWindowSize=7, searchWindowSize=21)
+
+    # Apply adaptive thresholding
+    thresh_img = cv2.adaptiveThreshold(nl_mean_filtered_img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+
+    # Apply erosion to make bold text thinner
+    kernel_thin_text = np.ones((2, 2), np.uint8)  # Increase kernel size to (2, 2)
+    eroded_thin_text_img = cv2.erode(thresh_img, kernel_thin_text, iterations=2)  # Increase iterations to 2
+
+    # Apply dilation and erosion operations
+    kernel_dilation = np.ones((2, 4), np.uint8)
+    kernel_erosion = np.ones((2, 2), np.uint8)
+    dilated_img = cv2.dilate(eroded_thin_text_img, kernel_dilation, iterations=1)
+    eroded_img = cv2.erode(dilated_img, kernel_erosion, iterations=1)
+
+    # Apply opening operation (erosion followed by dilation)
+    opening_img = cv2.morphologyEx(eroded_img, cv2.MORPH_OPEN, kernel_erosion)
+
+    # Save the enhanced image
+    cv2.imwrite(output_path, opening_img)
+
+    return opening_img
+
+def extract_text(image, language):
+    reader = easyocr.Reader([language], gpu=False)
+    result = reader.readtext(image, detail=0, paragraph=True)
+
+    return result
+
+def main():
+    a=input("path    ")
+    input_image_path = a+".jpg"
+    enhanced_image_path = "enhanced_image.jpg"
+    arabic_language = "ar"
+
+    enhanced_image = enhance_image(input_image_path, enhanced_image_path)
+    extracted_text = extract_text(enhanced_image, arabic_language)
+
+    print("Extracted Text:")
+    for text in extracted_text:
+        print(text)
+
+if __name__ == "__main__":
+    main()
